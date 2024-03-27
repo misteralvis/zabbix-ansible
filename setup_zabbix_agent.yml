@@ -1,0 +1,8 @@
+- name: Configure Zabbix Agent
+  hosts: localhost
+  connection: local
+
+  tasks:
+    - name: Setup zabbix-agent Role
+      import_role:
+        name: zabbix-agent

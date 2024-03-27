@@ -1,0 +1,36 @@
+---
+# defaults file for zabbix-proxy
+required_variables:
+  - Hostname
+  - Server
+  - Proxy_ConfFile
+  - Proxy_ConfFileBackup
+  - DBName
+  - LogFile
+  - LogFileSize
+  - LogRemoteCommands
+  - ConfigFrequency
+  - ExternalScripts
+  - EnableRemoteCommands
+  - TLSConnect
+  - TLSAccept
+  - TLSPSKIdentity
+  - TLSPSKFile
+  - AllowKey
+
+#Hostname: ""
+#Server: ""
+Proxy_ConfFile: "/etc/zabbix/zabbix_proxy.conf"
+Proxy_ConfFileBackup: "/zabbix/bkup/zabbix_proxy.conf.GA"
+DBName: "/zabbix/zabbix_proxy.db"
+LogFile: "/zabbix/log/zabbix_proxy.log"
+LogFileSize: 1024
+LogRemoteCommands: 1
+ConfigFrequency: 120
+ExternalScripts: "/zabbix/scripts/externalscripts/"
+EnableRemoteCommands: 1
+TLSConnect: psk
+TLSAccept: psk
+TLSPSKIdentity: "{{ Hostname }}"
+TLSPSKFile: "/zabbix/security/zabbix-proxy.psk"
+AllowKey: 'system.run[*]'

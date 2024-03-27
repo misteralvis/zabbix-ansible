@@ -1,0 +1,5 @@
+---
+# vars file for zabbix-proxy
+Agent_ConfFileBackup: "/zabbix/bkup/zabbix_agent2.conf.GA"
+Agent_Server: "127.0.0.1"
+Agent_ServerActive: "127.0.0.1"

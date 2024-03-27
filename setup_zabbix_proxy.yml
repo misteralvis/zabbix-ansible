@@ -1,0 +1,33 @@
+- name: Configure Zabbix Proxy Server
+  hosts: localhost
+  connection: local
+
+  tasks:
+    - name: Setup zabbix-proxy Role
+      import_role:
+        name: zabbix-proxy
+
+    - name: Setup zabbix-agent Role
+      import_role:
+        name: zabbix-agent
+
+    - name: Print steps to add to Zabbix
+      debug:
+        msg:
+          - "Use the following steps to add the Proxy to Zabbix, if needed."
+          - "1.) Login to Zabbix"
+          - "2.) Access \"Administration\" > \"Proxies\", and click \"Create proxy\""
+          - "3.) On Proxy tab, input \"Proxy name\":"
+          - "    '{{ Hostname }}'"
+          - "4.) Select \"Encryption\" tab, and do the following."
+          - "    Uncheck No Encryption"
+          - "    Check PSK, and enter the following."
+          - "    PSK identity: "
+          - "      '{{ TLSPSKIdentity }}'"
+          - "    PSK:"
+          - "      '{{ proxy_psk_value.content | b64decode }}'"
+          - "    Select \"Add\""
+          - "5.) Refresh tab and verify \"Last Seen (age)\" is updating with < 10s. (Note: This could be delayed a bit.)"
+          - "6.) Verify the Agent on the Proxy has registered into Zabbix (Note: This could be delayed a bit.) :"
+          - "    Access \"Configuration\" > \"Hosts\"."
+          - "    You should see the Proxy, and it should have Proxy/Linux templates applied."

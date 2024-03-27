@@ -1,0 +1,289 @@
+---
+
+- name: Check if required variables are defined and not empty
+  assert:
+    that:
+      - vars[item] is defined
+      - (vars[item] | default('')) != ''
+    fail_msg: "Required variable '{{ item }}' is not defined or is empty"
+    msg: 
+    - "All required variables are defined and not empty:"
+  loop: "{{ required_variables }}"
+
+- name: Print variables for debugging purposes
+  ansible.builtin.debug:
+    msg:
+    - "PWD: '{{ ansible_env.PWD }}'"
+    - "Hostname: '{{ Hostname }}'"
+    - "Server: '{{ Server }}'"
+    - "Proxy_ConfFile: '{{ Proxy_ConfFile }}'"
+    - "Proxy_ConfFileBackup: '{{ Proxy_ConfFileBackup }}'"
+    - "DBName: '{{ DBName }}'"
+    - "LogFile: '{{ LogFile }}'"
+    - "LogFileSize: '{{ LogFileSize }}'"
+    - "LogRemoteCommands: '{{ LogRemoteCommands }}'"
+    - "ExternalScripts: '{{ ExternalScripts }}'"
+    - "EnableRemoteCommands: '{{ EnableRemoteCommands }}'"
+    - "SNMPTrapperFile: '{{ SNMPTrapperFile }}'"
+    - "StartSNMPTrapper: '{{ StartSNMPTrapper }}'"
+    - "TLSConnect: '{{ TLSConnect }}'"
+    - "TLSAccept: '{{ TLSAccept }}'"
+    - "TLSPSKIdentity: '{{ TLSPSKIdentity }}'"
+    - "TLSPSKFile: '{{ TLSPSKFile }}'"
+    - "AllowKey: '{{ AllowKey }}'"
+
+#---
+#--- Proxy system configurations
+#---
+- name: Update hostname
+  hostname:
+    name: "{{ Hostname }}"
+
+- name: Add group zabbix
+  group:
+    name: zabbix
+    state: present
+
+- name: Add user zabbix
+  user:
+    name: zabbix
+    group: zabbix
+    createhome: yes
+
+- name: Create Zabbix directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: zabbix
+    group: zabbix
+    mode: "0755"
+  loop:
+    - /zabbix
+    - /zabbix/security
+    - /zabbix/scripts
+    - /zabbix/snmp
+    - /zabbix/snmp/mibs
+    - /zabbix/log
+    - /zabbix/bkup
+    - /zabbix/scripts/externalscripts
+
+- name: Modify /etc/profile
+  blockinfile:
+    path: /etc/profile
+    backup: true
+    marker: "# Set history to show timestamps"
+    block: |
+      export HISTTIMEFORMAT="%F %T "
+
+- name: Disable SELinux dynamically
+  ansible.posix.selinux:
+    state: disabled
+
+- name: Disable SELinux persistently
+  lineinfile:
+    path: /etc/selinux/config
+    line: 'SELINUX=disabled'
+
+- name: Update yum package cache
+  yum:
+    update_cache: yes
+
+- name: Install Zabbix repository RPM
+  yum:
+    name: https://repo.zabbix.com/zabbix/6.0/rhel/9/x86_64/zabbix-release-6.0-4.el9.noarch.rpm
+    disable_gpg_check: True
+    state: present
+
+- name: Install required packages
+  package:
+    name: 
+      - net-tools
+      - telnet
+      - iperf3
+      - bind-utils
+      - net-snmp
+      - net-snmp-perl
+      - net-snmp-utils
+      - zabbix-proxy-sqlite3
+      - zabbix-agent2
+      - fping
+    state: present
+
+- name: Check symlink /var/log/zabbix already setup
+  stat:
+    path: /var/log/zabbix
+  register: zabbix_log_symlink_stat
+
+- name: Remove /var/log/zabbix directory
+  file:
+    path: /var/log/zabbix
+    state: absent
+  when: zabbix_log_symlink_stat.stat.islnk == False
+
+- name: Create symlink for /var/log/zabbix
+  file:
+    src: /zabbix/log
+    dest: /var/log/zabbix
+    state: link
+  when: zabbix_log_symlink_stat.stat.islnk == False
+
+#---
+#--- Start Proxy Service configuration
+#---
+- name: Check Zabbix Proxy psk already present
+  stat:
+    path: /zabbix/security/zabbix-proxy.psk
+  register: zabbix_proxy_psk_stat
+
+- name: Generate random hex string
+  shell: openssl rand -hex 32
+  register: random_hex
+  no_log: true
+  when: zabbix_proxy_psk_stat.stat.exists == False
+
+- name: Write random hex to file
+  copy:
+    content: "{{ random_hex.stdout }}"
+    dest: /zabbix/security/zabbix-proxy.psk
+  when: zabbix_proxy_psk_stat.stat.exists == False
+
+- name: Register the value of the zabbix-proxy.psk
+  slurp:
+    src: /zabbix/security/zabbix-proxy.psk
+  register: proxy_psk_value
+
+- name: Check Backup /etc/zabbix/zabbix_proxy.conf already present
+  stat:
+    path: "{{ Proxy_ConfFileBackup }}"
+  register: zabbix_proxy_conf_backup_stat
+
+- name: Backup /etc/zabbix/zabbix_proxy.conf
+  command: "cp {{ Proxy_ConfFile }} {{Proxy_ConfFileBackup}}"
+  when: zabbix_proxy_conf_backup_stat.stat.exists == False
+
+- name: Set Server in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    regexp: '^Server='
+    line: 'Server={{ Server }}'
+
+- name: Set Hostname in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    regexp: '^Hostname='
+    line: 'Hostname={{ Hostname }}'
+
+- name: Set DBName in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    regexp: '^DBName='
+    line: 'DBName={{ DBName }}'
+
+- name: Set ConfigFrequency in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# ConfigFrequency='
+    regexp: '^ConfigFrequency='
+    line: 'ConfigFrequency={{ ConfigFrequency }}'
+
+- name: Set LogFile in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    regexp: '^LogFile='
+    line: 'LogFile={{ LogFile }}'
+
+- name: Set LogFileSize in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    regexp: '^LogFileSize='
+    line: 'LogFileSize={{ LogFileSize }}'
+
+- name: Set LogRemoteCommands in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# LogRemoteCommands='
+    regexp: '^LogRemoteCommands='
+    line: 'LogRemoteCommands={{ LogRemoteCommands }}'
+
+- name: Set EnableRemoteCommands in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# EnableRemoteCommands='
+    regexp: '^EnableRemoteCommands='
+    line: 'EnableRemoteCommands={{ EnableRemoteCommands }}'
+
+- name: Set ExternalScripts in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# ExternalScripts='
+    regexp: '^ExternalScripts='
+    line: 'ExternalScripts={{ ExternalScripts }}'
+
+- name: Set SNMPTrapperFile in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    regexp: '^SNMPTrapperFile='
+    line: 'SNMPTrapperFile={{ SNMPTrapperFile }}'
+
+- name: Set StartSNMPTrapper in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# StartSNMPTrapper='
+    regexp: '^StartSNMPTrapper='
+    line: 'StartSNMPTrapper={{ StartSNMPTrapper }}'
+
+- name: Set TLSConnect in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# TLSConnect='
+    regexp: '^TLSConnect='
+    line: 'TLSConnect={{ TLSConnect }}'
+
+- name: Set TLSAccept in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# TLSAccept='
+    regexp: '^TLSAccept='
+    line: 'TLSAccept={{ TLSAccept }}'
+
+- name: Set TLSPSKIdentity in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# TLSPSKIdentity='
+    regexp: '^TLSPSKIdentity='
+    line: 'TLSPSKIdentity={{ TLSPSKIdentity }}'
+
+- name: Set TLSPSKFile in Zabbix proxy config
+  lineinfile:
+    path: "{{ Proxy_ConfFile }}"
+    insertafter: '^# TLSPSKFile='
+    regexp: '^TLSPSKFile='
+    line: 'TLSPSKFile={{ TLSPSKFile }}'
+
+- name: Add logrotate configuration for zabbix_proxy.log
+  blockinfile:
+    path: /etc/logrotate.d/zabbix_proxy
+    backup: true
+    create: true
+    block: |
+      {{ LogFile }} {
+          daily
+          rotate 14
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0664 zabbix zabbix
+      }
+    marker: "# {mark} Managed by Ansible"
+    marker_begin: "# {mark} ANSIBLE MANAGED BLOCK BEGIN"
+    marker_end: "# {mark} ANSIBLE MANAGED BLOCK END"
+    insertafter: BOF
+
+#--- migrate to handler
+- name: Enable/restart zabbix-proxy service
+  systemd:
+    state: restarted
+    daemon_reload: true
+    enabled: true
+    name: zabbix-proxy

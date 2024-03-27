@@ -1,0 +1,9 @@
+---
+# handlers file for zabbix-agent2
+- name: Enable/restart zabbix-agent2 service
+  systemd:
+    state: restarted
+    daemon_reload: true
+    enabled: true
+    name: zabbix-agent2
+  listen: "restart zabbix-agent"

@@ -1,0 +1,24 @@
+---
+# defaults file for zabbix-agent
+required_variables:
+  - Hostname
+  - Agent_ConfFile
+  - Agent_ConfFileBackup
+  - Agent_Server
+  - Agent_ServerActive
+  - Agent_LogFile
+  - Agent_LogFileSize
+  - Agent_TLSPSKIdentity
+  - Agent_TLSPSKFile
+
+#Hostname: ""
+Agent_ConfFile: "/etc/zabbix/zabbix_agent2.conf"
+Agent_ConfFileBackup: "/etc/zabbix/zabbix_agent2.conf.GA"
+#Agent_Server: ""
+#Agent_ServerActive: ""
+Agent_LogFile: "/var/log/zabbix/zabbix_agent2.log"
+Agent_LogFileSize: 1024
+Agent_TLSPSKIdentity: zabbix-agent2-psk
+Agent_TLSPSKFile: "/etc/zabbix/zabbix-agent2.psk"
+Agent_TLSConnect: "psk"
+Agent_TLSAccept: "psk"
